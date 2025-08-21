@@ -1,4 +1,3 @@
-style.css
 /* General body styling for a dark theme */
 body {
     margin: 0;
@@ -15,11 +14,54 @@ body {
 
 /* Canvas styling */
 canvas {
-    border: 2px solid #000;
-    background-color: #0d0d0d;
+    border: 2px solid #010a13;
+    /* NEW: Background image for the map. 
+      Replace 'summoners_rift_background.jpg' with a URL to a top-down map image.
+      You can find one by searching for "Summoner's Rift top down map".
+    */
+    background-image: url('/* General body styling for a dark theme */
+body {
+    margin: 0;
+    background-color: #1a1a1a;
+    color: #f0f0f0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
 }
 
-/* Class to hide the cursor when the game is active */
+/* Canvas styling */
+canvas {
+    border: 2px solid #010a13;
+    /* NEW: Background image for the map. 
+      Replace 'summoners_rift_background.jpg' with a URL to a top-down map image.
+      You can find one by searching for "Summoner's Rift top down map".
+    */
+    background-image: url('https://i.imgur.com/vHqVOBg.jpeg'); /* Placeholder image */
+    background-size: cover;
+    background-position: center;
+}
+
+/* Class to hide the cursor and set a custom one during gameplay */
 .playing {
-    cursor: none;
+    /* NEW: Custom cursor.
+      Replace the URL with a link to a LoL cursor image (e.g., the gauntlet).
+      You can find one by searching for "league of legends cursor png".
+    */
+    cursor: url('https://imgur.com/a/OjvXBax'), auto; /* Placeholder cursor */
+}'); /* Placeholder image */
+    background-size: cover;
+    background-position: center;
+}
+
+/* Class to hide the cursor and set a custom one during gameplay */
+.playing {
+    /* NEW: Custom cursor.
+      Replace the URL with a link to a LoL cursor image (e.g., the gauntlet).
+      You can find one by searching for "league of legends cursor png".
+    */
+    cursor: url('https://i.imgur.com/l21H32y.png'), auto; /* Placeholder cursor */
 }
