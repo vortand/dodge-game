@@ -1,0 +1,25 @@
+style.css
+/* General body styling for a dark theme */
+body {
+    margin: 0;
+    background-color: #1a1a1a;
+    color: #f0f0f0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Canvas styling */
+canvas {
+    border: 2px solid #000;
+    background-color: #0d0d0d;
+}
+
+/* Class to hide the cursor when the game is active */
+.playing {
+    cursor: none;
+}
