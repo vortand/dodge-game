@@ -5,20 +5,28 @@ window.addEventListener('load', function() {
     canvas.width = 1280;
     canvas.height = 720;
 
+    // ASSET MANAGEMENT: In a real game, you'd have a proper asset loader.
+    // For now, we'll define placeholders.
+    const playerImage = null; // To use an image, you'd do: new Image(); playerImage.src = 'path/to/ezreal.png';
+    const projectileImages = {
+        mysticShot: null, // new Image(); mysticShot.src = '...';
+    };
+
+
     /**
      * Handles user input including keyboard and mouse.
      */
     class InputHandler {
         constructor(game) {
             this.game = game;
-            this.keys = new Set(); // Using a Set for efficient key tracking
+            this.keys = new Set();
             this.mouseX = 0;
             this.mouseY = 0;
-            this.mouseClicked = false;
+            this.isMouseDown = false; // NEW: Track if the mouse is held down
 
             window.addEventListener('keydown', e => {
-                const validKeys = ['w', 'a', 's', 'd', 'e', 'f'];
-                if (validKeys.includes(e.key.toLowerCase())) {
+                // We only care about ability keys now
+                if (e.key.toLowerCase() === 'e' || e.key.toLowerCase() === 'f') {
                     this.keys.add(e.key.toLowerCase());
                 }
             });
@@ -33,9 +41,15 @@ window.addEventListener('load', function() {
                 this.mouseY = e.clientY - rect.top;
             });
             
-            window.addEventListener('mousedown', e => {
+            this.game.canvas.addEventListener('mousedown', e => {
                  if (e.button === 0) { // Left mouse click
-                    this.mouseClicked = true;
+                    this.isMouseDown = true;
+                }
+            });
+
+            this.game.canvas.addEventListener('mouseup', e => {
+                if (e.button === 0) {
+                    this.isMouseDown = false;
                 }
             });
         }
@@ -47,60 +61,65 @@ window.addEventListener('load', function() {
     class Player {
         constructor(game) {
             this.game = game;
-            this.width = 30;
-            this.height = 30;
+            this.width = 40; // Size of the character sprite
+            this.height = 40;
             this.x = this.game.width / 2 - this.width / 2;
             this.y = this.game.height / 2 - this.height / 2;
-            this.speed = 350; // pixels per second
+            
+            // NEW: Click-to-move properties
+            this.targetX = this.x;
+            this.targetY = this.y;
+
+            this.speed = 380;
             this.health = 1;
 
-            // Dash ability
-            this.dashCooldown = 3; // seconds
+            this.dashCooldown = 3;
             this.dashTimer = this.dashCooldown;
-            this.dashDistance = 200;
+            this.dashDistance = 250;
             this.dashSpeed = 1500;
             this.isDashing = false;
             this.dashTargetX = 0;
             this.dashTargetY = 0;
 
-
-            // Flash ability
-            this.flashCooldown = 15; // seconds
+            this.flashCooldown = 15;
             this.flashTimer = this.flashCooldown;
             this.maxFlashRange = 450;
         }
 
         update(deltaTime, inputHandler) {
-            // Update timers
             this.dashTimer += deltaTime;
             this.flashTimer += deltaTime;
 
             if (this.isDashing) {
                 this.performDashMovement(deltaTime);
-                return; // Don't allow other movements during dash
+                return;
             }
 
-            // Standard Movement
-            let dx = 0;
-            let dy = 0;
-            if (inputHandler.keys.has('w')) dy -= 1;
-            if (inputHandler.keys.has('s')) dy += 1;
-            if (inputHandler.keys.has('a')) dx -= 1;
-            if (inputHandler.keys.has('d')) dx += 1;
-
-            // Normalize diagonal movement
-            const magnitude = Math.sqrt(dx * dx + dy * dy);
-            if (magnitude > 0) {
-                dx /= magnitude;
-                dy /= magnitude;
+            // NEW: Hold-to-move logic
+            if (inputHandler.isMouseDown) {
+                this.targetX = inputHandler.mouseX;
+                this.targetY = inputHandler.mouseY;
             }
 
-            this.x += dx * this.speed * deltaTime;
-            this.y += dy * this.speed * deltaTime;
+            const dx = this.targetX - (this.x + this.width / 2);
+            const dy = this.targetY - (this.y + this.height / 2);
+            const distance = Math.sqrt(dx * dx + dy * dy);
 
+            // Move towards the target if not already there
+            if (distance > this.speed * deltaTime) {
+                const moveX = (dx / distance) * this.speed * deltaTime;
+                const moveY = (dy / distance) * this.speed * deltaTime;
+                this.x += moveX;
+                this.y += moveY;
+            } else {
+                this.x = this.targetX - this.width / 2;
+                this.y = this.targetY - this.height / 2;
+            }
+            
             // Handle Abilities
             if (inputHandler.keys.has('e')) this.dash(inputHandler.mouseX, inputHandler.mouseY);
             if (inputHandler.keys.has('f')) this.flash(inputHandler.mouseX, inputHandler.mouseY);
+            inputHandler.keys.clear(); // Consume ability press
 
             // Boundary checks
             this.x = Math.max(0, Math.min(this.game.width - this.width, this.x));
@@ -108,66 +127,80 @@ window.addEventListener('load', function() {
         }
         
         performDashMovement(deltaTime) {
-            const dx = this.dashTargetX - this.x;
-            const dy = this.dashTargetY - this.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
+             const dx = this.dashTargetX - this.x;
+             const dy = this.dashTargetY - this.y;
+             const distance = Math.sqrt(dx * dx + dy * dy);
 
-            if (distance < this.dashSpeed * deltaTime) {
-                this.x = this.dashTargetX;
-                this.y = this.dashTargetY;
-                this.isDashing = false;
-            } else {
-                const moveX = (dx / distance) * this.dashSpeed * deltaTime;
-                const moveY = (dy / distance) * this.dashSpeed * deltaTime;
-                this.x += moveX;
-                this.y += moveY;
-            }
+             if (distance < this.dashSpeed * deltaTime) {
+                 this.x = this.dashTargetX;
+                 this.y = this.dashTargetY;
+                 this.isDashing = false;
+                 this.targetX = this.x; // Stop movement after dash
+                 this.targetY = this.y;
+             } else {
+                 this.x += (dx / distance) * this.dashSpeed * deltaTime;
+                 this.y += (dy / distance) * this.dashSpeed * deltaTime;
+             }
         }
 
         draw(ctx) {
-            // ASSET_PLAYER
-            ctx.fillStyle = '#4a90e2'; // A nice blue color
-            ctx.fillRect(this.x, this.y, this.width, this.height);
+            // NEW: Drawing logic for a humanoid character
+            if (playerImage && playerImage.complete) {
+                // If you have a player image asset, it will be drawn here.
+                ctx.drawImage(playerImage, this.x, this.y, this.width, this.height);
+            } else {
+                // Placeholder if no image is loaded
+                // ASSET_PLAYER
+                ctx.fillStyle = '#f0e68c'; // Ezreal-like gold color
+                ctx.fillRect(this.x, this.y, this.width / 2, this.height);
+                 ctx.fillStyle = '#add8e6'; // Blueish cloak
+                ctx.fillRect(this.x + this.width / 2, this.y, this.width / 2, this.height);
+            }
+            // Draw a simple health bar above the player
+            ctx.fillStyle = '#101010';
+            ctx.fillRect(this.x - 5, this.y - 15, this.width + 10, 10);
+            ctx.fillStyle = '#00ff00';
+            ctx.fillRect(this.x - 5, this.y - 15, (this.width + 10) * this.health, 10);
         }
 
         dash(mouseX, mouseY) {
             if (this.dashTimer >= this.dashCooldown && !this.isDashing) {
                 this.isDashing = true;
                 this.dashTimer = 0;
-
                 const dx = mouseX - (this.x + this.width / 2);
                 const dy = mouseY - (this.y + this.height / 2);
                 const magnitude = Math.sqrt(dx * dx + dy * dy);
-                
-                let moveX = 0;
-                let moveY = 0;
                 if (magnitude > 0) {
-                    moveX = (dx / magnitude) * this.dashDistance;
-                    moveY = (dy / magnitude) * this.dashDistance;
+                    this.dashTargetX = this.x + (dx / magnitude) * this.dashDistance;
+                    this.dashTargetY = this.y + (dy / magnitude) * this.dashDistance;
+                } else {
+                     this.dashTargetX = this.x + this.dashDistance;
+                     this.dashTargetY = this.y;
                 }
-
-                this.dashTargetX = this.x + moveX;
-                this.dashTargetY = this.y + moveY;
             }
         }
-
+        
         flash(mouseX, mouseY) {
             if (this.flashTimer >= this.flashCooldown) {
                 this.flashTimer = 0;
-                const dx = mouseX - (this.x + this.width / 2);
-                const dy = mouseY - (this.y + this.height / 2);
+                const centerX = this.x + this.width / 2;
+                const centerY = this.y + this.height / 2;
+                const dx = mouseX - centerX;
+                const dy = mouseY - centerY;
                 const distance = Math.sqrt(dx * dx + dy * dy);
 
                 if (distance <= this.maxFlashRange) {
                     this.x = mouseX - this.width / 2;
                     this.y = mouseY - this.height / 2;
                 } else {
-                    const ratio = this.maxFlashRange / distance;
-                    this.x += dx * ratio;
-                    this.y += dy * ratio;
+                    this.x += (dx / distance) * this.maxFlashRange;
+                    this.y += (dy / distance) * this.maxFlashRange;
                 }
+                this.targetX = this.x; // Stop movement after flash
+                this.targetY = this.y;
             }
         }
+
 
         takeDamage() {
             this.health = 0;
@@ -176,6 +209,8 @@ window.addEventListener('load', function() {
         reset() {
             this.x = this.game.width / 2 - this.width / 2;
             this.y = this.game.height / 2 - this.height / 2;
+            this.targetX = this.x;
+            this.targetY = this.y;
             this.health = 1;
             this.dashTimer = this.dashCooldown;
             this.flashTimer = this.flashCooldown;
@@ -187,23 +222,19 @@ window.addEventListener('load', function() {
      * Base class for all projectiles.
      */
     class Projectile {
-        constructor(x, y, radius) {
-            this.x = x;
-            this.y = y;
-            this.radius = radius;
-            this.active = true;
-        }
-    }
-
-    /**
-     * A projectile that moves in a straight line.
-     */
-    class LinearProjectile extends Projectile {
-        constructor(game, startX, startY, targetX, targetY, speed) {
-            super(startX, startY, 8);
+        constructor(game, startX, startY, targetX, targetY, config) {
             this.game = game;
-            this.speed = speed;
-
+            this.x = startX;
+            this.y = startY;
+            this.active = true;
+            
+            // Copy properties from config
+            this.speed = config.speed;
+            this.color = config.color;
+            this.width = config.width;
+            this.height = config.height;
+            this.radius = config.radius || Math.max(this.width, this.height) / 2; // Approx radius for collision
+            
             const dx = targetX - startX;
             const dy = targetY - startY;
             const magnitude = Math.sqrt(dx * dx + dy * dy);
@@ -216,59 +247,21 @@ window.addEventListener('load', function() {
             this.x += this.vx * deltaTime;
             this.y += this.vy * deltaTime;
 
-            // Deactivate if it goes off-screen
-            if (this.x + this.radius < 0 || this.x - this.radius > this.game.width ||
-                this.y + this.radius < 0 || this.y - this.radius > this.game.height) {
+            if (this.x + this.width < 0 || this.x > this.game.width ||
+                this.y + this.height < 0 || this.y > this.game.height) {
                 this.active = false;
             }
         }
 
         draw(ctx) {
             // ASSET_PROJECTILE
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-            ctx.fillStyle = '#ff4136'; // Red
-            ctx.fill();
-        }
-    }
-
-    /**
-     * An Area of Effect (AoE) projectile that explodes after a delay.
-     */
-    class AoEProjectile extends Projectile {
-        constructor(x, y) {
-            super(x, y, 60);
-            this.warningDuration = 1.0; // 1 second warning
-            this.activeDuration = 0.3; // 0.3 seconds active damage
-            this.timer = 0;
-            this.state = 'WARNING'; // 'WARNING', 'ACTIVE'
-        }
-
-        update(deltaTime) {
-            this.timer += deltaTime;
-            if (this.state === 'WARNING' && this.timer >= this.warningDuration) {
-                this.state = 'ACTIVE';
-            }
-            if (this.state === 'ACTIVE' && this.timer >= this.warningDuration + this.activeDuration) {
-                this.active = false;
-            }
-        }
-
-        draw(ctx) {
-             // ASSET_PROJECTILE
-            if (this.state === 'WARNING') {
-                const warningProgress = this.timer / this.warningDuration;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.strokeStyle = `rgba(255, 65, 54, ${0.2 + warningProgress * 0.8})`;
-                ctx.lineWidth = 4;
-                ctx.stroke();
-            } else if (this.state === 'ACTIVE') {
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(255, 65, 54, 0.8)'; // Solid red
-                ctx.fill();
-            }
+            // Draw as a rotating rectangle to simulate skillshots
+            ctx.save();
+            ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+            ctx.rotate(Math.atan2(this.vy, this.vx));
+            ctx.fillStyle = this.color;
+            ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+            ctx.restore();
         }
     }
 
@@ -279,61 +272,51 @@ window.addEventListener('load', function() {
     class EnemySpawner {
         constructor(game) {
             this.game = game;
-            this.spawnInterval = 2.0; // Start by spawning one every 2 seconds
+            this.spawnInterval = 1.5;
             this.spawnTimer = 0;
+            
+            // NEW: Define different projectile types based on LoL skills
+            this.projectileTypes = [
+                { name: 'MysticShot', speed: 1200, color: '#f2d479', width: 70, height: 15 },
+                { name: 'DarkBinding', speed: 900, color: '#4b0082', width: 25, height: 25, radius: 15 },
+                { name: 'LightBinding', speed: 1000, color: '#ffff99', width: 30, height: 30, radius: 18 },
+                { name: 'RocketGrab', speed: 1100, color: '#a0522d', width: 20, height: 20, radius: 12 },
+            ];
         }
 
         update(deltaTime, score) {
             this.spawnTimer += deltaTime;
-            
-            // Difficulty scaling: spawn rate increases with score
-            this.spawnInterval = Math.max(0.1, 2.0 - score / 30);
+            this.spawnInterval = Math.max(0.08, 1.5 - score / 40);
             
             if (this.spawnTimer >= this.spawnInterval) {
                 this.spawnTimer = 0;
-                this.spawnProjectile(score);
+                this.spawnProjectile();
 
-                // Chance to spawn a second projectile at higher scores
-                if (score > 20 && Math.random() < 0.3) {
-                     this.spawnProjectile(score);
+                if (score > 30 && Math.random() < 0.5) {
+                    this.spawnProjectile();
                 }
-            }
-
-            // Occasionally spawn an AoE projectile
-            if (Math.random() < 0.002 && score > 10) {
-                 this.game.projectiles.push(new AoEProjectile(this.game.player.x + this.game.player.width / 2, this.game.player.y + this.game.player.height / 2));
             }
         }
 
-        spawnProjectile(score) {
+        spawnProjectile() {
             let spawnX, spawnY;
             const edge = Math.floor(Math.random() * 4);
             switch (edge) {
-                case 0: // Top
-                    spawnX = Math.random() * this.game.width;
-                    spawnY = -20;
-                    break;
-                case 1: // Right
-                    spawnX = this.game.width + 20;
-                    spawnY = Math.random() * this.game.height;
-                    break;
-                case 2: // Bottom
-                    spawnX = Math.random() * this.game.width;
-                    spawnY = this.game.height + 20;
-                    break;
-                case 3: // Left
-                    spawnX = -20;
-                    spawnY = Math.random() * this.game.height;
-                    break;
+                case 0: spawnX = Math.random() * this.game.width; spawnY = -50; break;
+                case 1: spawnX = this.game.width + 50; spawnY = Math.random() * this.game.height; break;
+                case 2: spawnX = Math.random() * this.game.width; spawnY = this.game.height + 50; break;
+                case 3: spawnX = -50; spawnY = Math.random() * this.game.height; break;
             }
             
-            // Difficulty scaling: projectile speed increases with score
-            const projectileSpeed = 200 + score * 4;
-            this.game.projectiles.push(new LinearProjectile(this.game, spawnX, spawnY, this.game.player.x, this.game.player.y, projectileSpeed));
+            const projectileConfig = this.projectileTypes[Math.floor(Math.random() * this.projectileTypes.length)];
+            const targetX = this.game.player.x + this.game.player.width / 2;
+            const targetY = this.game.player.y + this.game.player.height / 2;
+
+            this.game.projectiles.push(new Projectile(this.game, spawnX, spawnY, targetX, targetY, projectileConfig));
         }
         
         reset() {
-            this.spawnInterval = 2.0;
+            this.spawnInterval = 1.5;
             this.spawnTimer = 0;
         }
     }
@@ -347,7 +330,7 @@ window.addEventListener('load', function() {
             this.ctx = ctx;
             this.width = canvas.width;
             this.height = canvas.height;
-            this.gameState = 'MENU'; // 'MENU', 'PLAYING', 'GAME_OVER'
+            this.gameState = 'MENU';
 
             this.inputHandler = new InputHandler(this);
             this.player = new Player(this);
@@ -356,14 +339,12 @@ window.addEventListener('load', function() {
             this.projectiles = [];
             this.score = 0;
             this.highScore = localStorage.getItem('dodgeGameHighScore') || 0;
-
-            this.lastTime = 0;
         }
 
         update(deltaTime) {
             switch (this.gameState) {
                 case 'MENU':
-                    if (this.inputHandler.mouseClicked) {
+                    if (this.inputHandler.isMouseDown) {
                         this.gameState = 'PLAYING';
                         this.canvas.classList.add('playing');
                     }
@@ -373,20 +354,15 @@ window.addEventListener('load', function() {
                     this.player.update(deltaTime, this.inputHandler);
                     this.enemySpawner.update(deltaTime, this.score);
                     
-                    // Update and check projectiles
                     this.projectiles.forEach(p => {
                         p.update(deltaTime);
                         if (checkCollision(this.player, p)) {
-                            // AoE projectiles only damage when active
-                            if (p instanceof AoEProjectile && p.state !== 'ACTIVE') return;
                             this.player.takeDamage();
                         }
                     });
 
-                    // Remove inactive projectiles
                     this.projectiles = this.projectiles.filter(p => p.active);
                     
-                    // Check for game over
                     if (this.player.health <= 0) {
                         this.gameState = 'GAME_OVER';
                         this.canvas.classList.remove('playing');
@@ -397,23 +373,26 @@ window.addEventListener('load', function() {
                     }
                     break;
                 case 'GAME_OVER':
-                    if (this.inputHandler.mouseClicked) {
-                       this.reset();
-                       this.gameState = 'PLAYING';
-                       this.canvas.classList.add('playing');
-                    }
+                     if (this.inputHandler.isMouseDown) {
+                        // Use a small delay to prevent accidental restart
+                        setTimeout(() => {
+                            this.reset();
+                            this.gameState = 'PLAYING';
+                            this.canvas.classList.add('playing');
+                            this.inputHandler.isMouseDown = false;
+                        }, 100);
+                     }
                     break;
             }
-            // Reset click state after processing
-            this.inputHandler.mouseClicked = false;
         }
 
         draw() {
+            // Clear the canvas. The background image from CSS will show through.
             this.ctx.clearRect(0, 0, this.width, this.height);
 
             switch (this.gameState) {
                 case 'MENU':
-                    this.drawText('CLICK TO START', this.width / 2, this.height / 2, 60, 'white');
+                    this.drawText('CLICK TO START', this.width / 2, this.height / 2, 70, '#c4b998', '#010a13');
                     break;
                 case 'PLAYING':
                     this.player.draw(this.ctx);
@@ -421,63 +400,30 @@ window.addEventListener('load', function() {
                     this.drawUI();
                     break;
                 case 'GAME_OVER':
-                    this.drawText('GAME OVER', this.width / 2, this.height / 2 - 60, 80, '#ff4136');
-                    this.drawText(`Score: ${Math.floor(this.score)}`, this.width / 2, this.height / 2 + 10, 40, 'white');
-                    this.drawText(`High Score: ${this.highScore}`, this.width / 2, this.height / 2 + 60, 30, '#aaa');
-                    this.drawText('Click to Play Again', this.width / 2, this.height / 2 + 120, 30, 'white');
+                    this.drawText('DEFEAT', this.width / 2, this.height / 2 - 80, 100, '#ff4136', '#010a13');
+                    this.drawText(`Time: ${Math.floor(this.score)}s`, this.width / 2, this.height / 2 + 10, 40, '#c4b998', '#010a13');
+                    this.drawText(`High Score: ${this.highScore}s`, this.width / 2, this.height / 2 + 60, 30, '#a09477', '#010a13');
+                    this.drawText('Click to Play Again', this.width / 2, this.height / 2 + 120, 30, '#c4b998', '#010a13');
                     break;
             }
         }
 
         drawUI() {
-            // Score and High Score
-            this.drawText(`Score: ${Math.floor(this.score)}`, 20, 40, 30, 'white', 'left');
-            this.drawText(`High Score: ${this.highScore}`, 20, 80, 20, '#aaa', 'left');
-
-            // Ability Cooldowns
-            const abilityY = this.height - 40;
-            const abilitySpacing = 120;
-            // Dash (E)
-            this.drawAbilityIcon(this.width / 2 - abilitySpacing, abilityY, 'E', this.player.dashTimer, this.player.dashCooldown);
-            // Flash (F)
-            this.drawAbilityIcon(this.width / 2 + abilitySpacing, abilityY, 'F', this.player.flashTimer, this.player.flashCooldown);
+            this.drawText(`Time: ${Math.floor(this.score)}`, this.width / 2, 40, 30, '#c4b998', '#010a13');
         }
 
-        drawText(text, x, y, size, color, align = 'center') {
-            this.ctx.font = `bold ${size}px 'Segoe UI', sans-serif`;
+        drawText(text, x, y, size, color, strokeColor) {
+            this.ctx.font = `bold ${size}px "Beaufort for LOL", "Spiegel", sans-serif`;
             this.ctx.fillStyle = color;
-            this.ctx.textAlign = align;
-            this.ctx.textBaseline = 'middle';
-            this.ctx.fillText(text, x, y);
-        }
-
-        drawAbilityIcon(x, y, key, timer, cooldown) {
-            const size = 60;
-            const ready = timer >= cooldown;
-        
-            // Background
-            this.ctx.fillStyle = ready ? '#222' : '#555';
-            this.ctx.strokeStyle = ready ? '#888' : '#aaa';
-            this.ctx.lineWidth = 2;
-            this.ctx.fillRect(x - size / 2, y - size / 2, size, size);
-            this.ctx.strokeRect(x - size / 2, y - size / 2, size, size);
-        
-            // Key Text
-            this.ctx.fillStyle = ready ? '#fff' : '#888';
-            this.ctx.font = `bold 24px 'Segoe UI'`;
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
-            this.ctx.fillText(key, x, y);
-        
-            // Cooldown overlay
-            if (!ready) {
-                const remaining = cooldown - timer;
-                this.ctx.fillStyle = 'rgba(0,0,0,0.6)';
-                this.ctx.fillRect(x - size / 2, y - size / 2, size, size);
-                this.ctx.fillStyle = '#fff';
-                this.ctx.font = `bold 28px 'Segoe UI'`;
-                this.ctx.fillText(remaining.toFixed(1), x, y);
+            
+            if (strokeColor) {
+                this.ctx.strokeStyle = strokeColor;
+                this.ctx.lineWidth = size / 10;
+                this.ctx.strokeText(text, x, y);
             }
+            this.ctx.fillText(text, x, y);
         }
 
         reset() {
@@ -488,18 +434,13 @@ window.addEventListener('load', function() {
         }
     }
 
-    /**
-     * Circle vs Rectangle collision detection.
-     * @param {object} rect - The rectangle object {x, y, width, height}.
-     * @param {object} circle - The circle object {x, y, radius}.
-     * @returns {boolean} - True if they are colliding.
-     */
-    function checkCollision(rect, circle) {
-        // Find the closest point on the rect to the circle's center
+    function checkCollision(rect, projectile) {
+        // Use projectile's approximate radius for simpler collision
+        const circle = { x: projectile.x + projectile.width / 2, y: projectile.y + projectile.height / 2, radius: projectile.radius };
+        
         const closestX = Math.max(rect.x, Math.min(circle.x, rect.x + rect.width));
         const closestY = Math.max(rect.y, Math.min(circle.y, rect.y + rect.height));
 
-        // Calculate the distance between the closest point and the circle's center
         const distanceX = circle.x - closestX;
         const distanceY = circle.y - closestY;
         const distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
@@ -507,18 +448,14 @@ window.addEventListener('load', function() {
         return distanceSquared < (circle.radius * circle.radius);
     }
     
-
-    // Initialize and start the game loop
     const game = new GameManager(canvas, ctx);
     let lastTime = 0;
 
     function animate(timestamp) {
-        const deltaTime = (timestamp - lastTime) / 1000; // time in seconds
+        const deltaTime = (timestamp - lastTime) / 1000;
         lastTime = timestamp;
-
-        game.update(deltaTime);
+        game.update(deltaTime || 0); // Use 0 if deltaTime is NaN on the first frame
         game.draw();
-
         requestAnimationFrame(animate);
     }
 
